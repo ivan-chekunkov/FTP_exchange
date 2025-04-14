@@ -12,6 +12,7 @@ loguru = "^0.7.2"
 pyinstaller = "^6.7.0"
 ruff = "^0.5.4"
 isort = "^5.13.2"
+pyyaml = "^6.0.2"
 
 [build-system]
 requires = ["poetry-core"]
