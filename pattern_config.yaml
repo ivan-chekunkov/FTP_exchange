@@ -3,3 +3,18 @@ ftp:
   port: 21
   user: USER
   password: pass
+exchange:
+  upload:
+    kvit:
+      local_path: C:\Localpath\kvit
+      ftp_path: remote/kvit
+    files:
+      local_path: C:\Localpath\files
+      ftp_path: remote/files
+    docs:
+      local_path: C:\Localpath\docs
+      ftp_path: remote/docs
+  download:
+    files:
+      local_path: C:\Localpath\remote
+      ftp_path: local/files

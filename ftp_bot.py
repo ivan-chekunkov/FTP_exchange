@@ -1,13 +1,15 @@
 import asyncio
 import os
+import shutil
 import sys
 from ftplib import FTP
 from pathlib import Path
-import shutil
+from typing import NoReturn
+
 import aioftp
 import yaml
-from loguru import logger
 from aioftp import StatusCodeError
+from loguru import logger
 
 logger.add(
     "Logfile.log",
@@ -25,7 +27,7 @@ def get_basename_file() -> str:
 
 CONFIG: dict = {}
 
-SYSTEM_VARIABLE: dict = {"basename_file": get_basename_file, "version": "0.4"}
+SYSTEM_VARIABLE: dict = {"basename_file": get_basename_file, "version": "0.5"}
 
 HELP_DESCRIPTION: list = [
     "- Чтобы получить справку, наберите '{name} help'",
@@ -44,17 +46,19 @@ def read_config(file_path: Path = Path("config.yaml")) -> dict:
         with open(file_path, "r") as file:
             try:
                 result = yaml.safe_load(file)
-                logger.debug("File config '{}' loaded!".format(file_path))
+                logger.debug(
+                    "Файл конфигураций '{}' загружен!".format(file_path)
+                )
                 return result
             except Exception as error:
                 logger.error(error)
                 sys.exit()
     else:
-        logger.error("File '{}' not found!".format(file_path))
+        logger.error("Файл конфигураций '{}' не обнаружен!".format(file_path))
         sys.exit()
 
 
-def call_help():
+def call_help() -> NoReturn:
     """Вызов справки"""
     logger.info("Call Help")
     print("\033[1;32;40m")
@@ -65,7 +69,7 @@ def call_help():
     sys.exit()
 
 
-def parse_argv(argv: list) -> bool | Path | None:
+def parse_argv(argv: list) -> bool | Path | NoReturn:
     """Разбор возможных параметров запуска программы"""
     if len(argv) == 1:
         return False
@@ -74,34 +78,15 @@ def parse_argv(argv: list) -> bool | Path | None:
     return Path(argv[1])
 
 
-def ftp_connect():
-    ftp = FTP(CONFIG["ftp"]["host"])
-    ftp.login(user=CONFIG["ftp"]["user"], passwd=CONFIG["ftp"]["password"])
-    # files = ftp.nlst()
-    # print(files)
-    # with open("out/outfile.txt", "rb") as file:
-    #     ftp.storbinary("STOR out/outfile.txt", file)
-    # with open("in/infile.txt", "wb") as file:
-    #     ftp.retrbinary("RETR infile.txt", file.write)
-    # files = ftp.nlst()
-    # for ff in files:
-    #     response = ftp.sendcmd(f"MLST {ff}")
-    #     if "type=dir" in response:
-    #         print("Это папка")
-    #     elif "type=file" in response:
-    #         print("Это файл")
-    welcome_message = ftp.getwelcome()
-    print(welcome_message)
-    ftp.quit()
-
-
 class FTPError(Exception):
     """Ошибка отсутствия FTP коннекта"""
 
     pass
 
 
-def upload_file(ftp: FTP, local_file: Path, remote_path: str) -> bool:
+def upload_file(
+    ftp: FTP, local_file: Path, remote_path: str
+) -> bool | NoReturn:
     """Загрузка файла на FTP Server"""
     welcome_message = ftp.getwelcome()
     if welcome_message:
@@ -130,7 +115,7 @@ def upload_file(ftp: FTP, local_file: Path, remote_path: str) -> bool:
     return True
 
 
-def move_local_file(source: Path) -> None:
+def move_local_file(source: Path) -> None | NoReturn:
     """Перемещение файла в архив"""
     arh_path = source.parent.joinpath("arh")
     if not arh_path.exists():
@@ -151,18 +136,18 @@ def move_local_file(source: Path) -> None:
         sys.exit()
 
 
-def upload(ftp: FTP, local_path: Path, remote_path: str):
+def upload(ftp: FTP, local_path: Path, remote_path: str) -> None:
     """Обработка схемы для загрузки файлов на FTP Server"""
     if not local_path.exists():
-        logger.error("{} not found!".format(local_path))
-        return
+        logger.error("{} несуществует!".format(local_path))
+        return None
     if not local_path.is_dir():
-        logger.error("{} not dir!".format(local_path))
-        return
+        logger.error("{} не является директорией!".format(local_path))
+        return None
     local_files = list(filter(Path.is_file, local_path.iterdir()))
     if not local_files:
-        logger.debug("{} empty!".format(local_path))
-        return
+        logger.debug("{} пуста!".format(local_path))
+        return None
     for loc_file in local_files:
         res_code = upload_file(
             ftp=ftp, local_file=loc_file, remote_path=remote_path
@@ -171,20 +156,103 @@ def upload(ftp: FTP, local_path: Path, remote_path: str):
             move_local_file(source=loc_file)
 
 
-def download_file():
-    """
-    Проверяем коненкт к FTP
-    Проверяем папку на FTP
-    Смотрим наличе файлов на FTP
-    1 Файлов нет -> выходим
-    2 Файлы есть работаем с файлами
-    Проверяем существование локальной директории
-    Смотрим наличие такого же файла в локальной папке
-    1 Если есть то не копируем и игнорируем данный файл
-    2 Если файла нет, то копируем его с FTP
-    Если копирование удачное, то удаляем файл с FTP
-    """
-    pass
+def download_file(ftp: FTP, local_path: Path, remote_file: str) -> bool:
+    """Загрузка файла с FTP в локальную директорию"""
+    if not local_path.exists():
+        logger.error("{} несуществует!".format(local_path))
+        return None
+    if not local_path.is_dir():
+        logger.error("{} не является директорией!".format(local_path))
+        return None
+    local_files = list(
+        map(
+            lambda x: x.name,
+            filter(Path.is_file, local_path.iterdir()),
+        )
+    )
+    if remote_file in local_files:
+        logger.error(
+            "Файл {} уже существует в локальной директории".format(remote_file)
+        )
+        return False
+    local_file = local_path.joinpath(remote_file)
+    with open(local_file, "wb") as f:
+        ftp.retrbinary(f"RETR {remote_file}", f.write)
+        logger.info(
+            "Файл {} успешно скачан как {}".format(remote_file, local_file)
+        )
+        return True
+
+
+def get_files_ftp(ftp: FTP) -> list[str] | None:
+    """Получение списка файлов из директории FTP"""
+    result = []
+    for name, facts in ftp.mlsd():
+        if facts["type"] == "file":
+            result.append(name)
+    return result
+
+
+def delete_file_ftp(ftp: FTP, file_to_delete: str) -> None | NoReturn:
+    """Удаление файла на FTP"""
+    try:
+        ftp.delete(file_to_delete)
+        logger.info("Файл {} успешно удален".format(file_to_delete))
+    except Exception as err:
+        logger.error("Ошибка при удалении файла: {}".format(err))
+        sys.exit()
+
+
+def download(ftp: FTP, local_path: Path, remote_path: str) -> None:
+    """Обработка схемы загрузки файлов с FTP в локальную директорию"""
+    welcome_message = ftp.getwelcome()
+    if welcome_message:
+        logger.debug("FTP коннект!")
+    else:
+        raise FTPError
+    ftp.cwd("/")
+    try:
+        ftp.cwd(remote_path)
+    except Exception as err:
+        logger.error("Ошибка входа в папку на FTP: {}".format(err))
+        raise FTPError
+    files = get_files_ftp(ftp=ftp)
+    if not files:
+        return None
+    for remote_file in files:
+        res_code = download_file(
+            ftp=ftp, local_path=local_path, remote_file=remote_file
+        )
+        if res_code:
+            delete_file_ftp(ftp=ftp, file_to_delete=remote_file)
+
+
+def read_and_run_exchange() -> tuple[Path, str]:
+    
+
+
+if __name__ == "__main__":
+    arg = parse_argv(sys.argv)
+    if arg:
+        CONFIG = read_config(arg)
+    else:
+        CONFIG = read_config()
+    try:
+        ftp = FTP(CONFIG["ftp"]["host"])
+        ftp.login(user=CONFIG["ftp"]["user"], passwd=CONFIG["ftp"]["password"])
+    except Exception as err:
+        logger.error("Ошибка создания FTP {}".format(err))
+    upload(
+        ftp=ftp,
+        local_path=Path("C:\\Localpath\\files"),
+        remote_path="remote/files",
+    )
+    download(
+        ftp=ftp,
+        local_path=Path("C:\\Localpath\\ftp"),
+        remote_path="local",
+    )
+    # ftp_connect()
 
 
 async def download_multiple_files(client, files):
@@ -219,17 +287,22 @@ async def main():
         print("All files downloaded concurrently")
 
 
-if __name__ == "__main__":
-    arg = parse_argv(sys.argv)
-    if arg:
-        CONFIG = read_config(arg)
-    else:
-        CONFIG = read_config()
+def ftp_connect():
     ftp = FTP(CONFIG["ftp"]["host"])
     ftp.login(user=CONFIG["ftp"]["user"], passwd=CONFIG["ftp"]["password"])
-    upload(
-        ftp=ftp,
-        local_path=Path("C:\\Localpath\\files"),
-        remote_path="remote/files",
-    )
-    # ftp_connect()
+    # files = ftp.nlst()
+    # print(files)
+    # with open("out/outfile.txt", "rb") as file:
+    #     ftp.storbinary("STOR out/outfile.txt", file)
+    # with open("in/infile.txt", "wb") as file:
+    #     ftp.retrbinary("RETR infile.txt", file.write)
+    # files = ftp.nlst()
+    # for ff in files:
+    #     response = ftp.sendcmd(f"MLST {ff}")
+    #     if "type=dir" in response:
+    #         print("Это папка")
+    #     elif "type=file" in response:
+    #         print("Это файл")
+    welcome_message = ftp.getwelcome()
+    print(welcome_message)
+    ftp.quit()
