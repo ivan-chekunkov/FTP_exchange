@@ -4,7 +4,7 @@ import shutil
 import sys
 from ftplib import FTP
 from pathlib import Path
-from typing import NoReturn
+from typing import Callable, NoReturn, TypeAlias
 
 import aioftp
 import yaml
@@ -18,6 +18,8 @@ logger.add(
     rotation="10 MB",
     compression="zip",
 )
+
+WorkFunc: TypeAlias = Callable
 
 
 def get_basename_file() -> str:
@@ -227,8 +229,16 @@ def download(ftp: FTP, local_path: Path, remote_path: str) -> None:
             delete_file_ftp(ftp=ftp, file_to_delete=remote_file)
 
 
-def read_and_run_exchange() -> tuple[Path, str]:
-    
+def read_and_run_exchange() -> list[tuple[WorkFunc, Path, str]]:
+    result = []
+    upload = CONFIG.get("upload")
+    if not upload:
+        logger.warning("В конфиге нет схемы для upload")
+    download = CONFIG.get("download")
+    if not download:
+        logger.warning("В конфиге нет схемы для download")
+    for f in upload:
+        pass
 
 
 if __name__ == "__main__":
