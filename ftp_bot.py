@@ -231,14 +231,22 @@ def download(ftp: FTP, local_path: Path, remote_path: str) -> None:
 
 def read_and_run_exchange() -> list[tuple[WorkFunc, Path, str]]:
     result = []
-    upload = CONFIG.get("upload")
-    if not upload:
+    exchange = CONFIG.get("exchange")
+    if not exchange:
+        logger.warning("В конфиге нет конфигурации exchange")
+    upload_schema: dict = exchange.get("upload")
+    if not upload_schema:
         logger.warning("В конфиге нет схемы для upload")
-    download = CONFIG.get("download")
-    if not download:
+    download_schema: dict = exchange.get("download")
+    if not download_schema:
         logger.warning("В конфиге нет схемы для download")
-    for f in upload:
-        pass
+    for val in upload_schema.values():
+        temp = (upload, Path(val["local_path"]), val["ftp_path"])
+        result.append(temp)
+    for val in download_schema.values():
+        temp = (download, Path(val["local_path"]), val["ftp_path"])
+        result.append(temp)
+    return result
 
 
 if __name__ == "__main__":
@@ -247,22 +255,15 @@ if __name__ == "__main__":
         CONFIG = read_config(arg)
     else:
         CONFIG = read_config()
+    schemas = read_and_run_exchange()
     try:
         ftp = FTP(CONFIG["ftp"]["host"])
         ftp.login(user=CONFIG["ftp"]["user"], passwd=CONFIG["ftp"]["password"])
     except Exception as err:
         logger.error("Ошибка создания FTP {}".format(err))
-    upload(
-        ftp=ftp,
-        local_path=Path("C:\\Localpath\\files"),
-        remote_path="remote/files",
-    )
-    download(
-        ftp=ftp,
-        local_path=Path("C:\\Localpath\\ftp"),
-        remote_path="local",
-    )
-    # ftp_connect()
+    for schema in schemas:
+        func, local, remote = schema
+        func(ftp, local, remote)
 
 
 async def download_multiple_files(client, files):
@@ -295,24 +296,3 @@ async def main():
 
         await download_multiple_files(client, files_to_download)
         print("All files downloaded concurrently")
-
-
-def ftp_connect():
-    ftp = FTP(CONFIG["ftp"]["host"])
-    ftp.login(user=CONFIG["ftp"]["user"], passwd=CONFIG["ftp"]["password"])
-    # files = ftp.nlst()
-    # print(files)
-    # with open("out/outfile.txt", "rb") as file:
-    #     ftp.storbinary("STOR out/outfile.txt", file)
-    # with open("in/infile.txt", "wb") as file:
-    #     ftp.retrbinary("RETR infile.txt", file.write)
-    # files = ftp.nlst()
-    # for ff in files:
-    #     response = ftp.sendcmd(f"MLST {ff}")
-    #     if "type=dir" in response:
-    #         print("Это папка")
-    #     elif "type=file" in response:
-    #         print("Это файл")
-    welcome_message = ftp.getwelcome()
-    print(welcome_message)
-    ftp.quit()
